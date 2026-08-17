@@ -121,16 +121,9 @@ You can copy this project and use it as your own local RAG application.
 Open your terminal and run:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/pdf-rag-assistant.git
+git clone https://github.com/krishshirole/pdf-rag-assistant.git
 ```
 
-Replace:
-
-```text
-YOUR_USERNAME
-```
-
-with the GitHub username that owns this repository.
 
 Then move into the project:
 
