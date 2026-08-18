@@ -1,5 +1,4 @@
 import os
-import streamlit as st
 
 from dotenv import load_dotenv
 
@@ -12,139 +11,44 @@ from langchain_chroma import Chroma
 load_dotenv()
 
 
-# --------------------------------------------------
-# GET OPENROUTER API KEY
-# --------------------------------------------------
-
-def get_api_key():
-
-    # For local development (.env)
-    api_key = os.getenv("OPENROUTER_API_KEY")
-
-    # For Streamlit Cloud
-    if not api_key:
-
-        try:
-            api_key = st.secrets["OPENROUTER_API_KEY"]
-
-        except Exception:
-            api_key = None
-
-    if not api_key:
-
-        raise Exception(
-            "OPENROUTER_API_KEY is missing. "
-            "Add it to your .env file or Streamlit Secrets."
-        )
-
-    return api_key
-
-
-# --------------------------------------------------
-# LOAD PDF
-# --------------------------------------------------
-
 def load_pdf(pdf_path, filename):
 
-    try:
+    loader = PyPDFLoader(pdf_path)
 
-        loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
 
-        documents = loader.load()
+    for document in documents:
+        document.metadata["source"] = filename
 
-        if not documents:
-            raise Exception(
-                "PDF contains no readable content."
-            )
+    return documents
 
-        for document in documents:
-            document.metadata["source"] = filename
-
-        return documents
-
-    except Exception as e:
-
-        raise Exception(
-            f"PDF loading error for '{filename}': {e}"
-        )
-
-
-# --------------------------------------------------
-# SPLIT DOCUMENTS
-# --------------------------------------------------
 
 def split_documents(documents):
 
-    try:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
 
-        if not documents:
-            raise Exception(
-                "No documents available for splitting."
-            )
+    return splitter.split_documents(documents)
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-
-        chunks = splitter.split_documents(
-            documents
-        )
-
-        if not chunks:
-            raise Exception(
-                "No chunks were created from the PDF."
-            )
-
-        return chunks
-
-    except Exception as e:
-
-        raise Exception(
-            f"Text splitting error: {e}"
-        )
-
-
-# --------------------------------------------------
-# CREATE VECTOR DATABASE
-# --------------------------------------------------
 
 def create_vectorstore(chunks):
 
-    try:
+    embeddings = OpenAIEmbeddings(
+        model="openai/text-embedding-3-small",
+        openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+        base_url="https://openrouter.ai/api/v1"
+    )
 
-        api_key = get_api_key()
+    vectorstore = Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        persist_directory="./chroma_db"
+    )
 
-        embeddings = OpenAIEmbeddings(
+    return vectorstore
 
-            model="openai/text-embedding-3-small",
-
-            openai_api_key=api_key,
-
-            base_url="https://openrouter.ai/api/v1"
-        )
-
-        vectorstore = Chroma.from_documents(
-
-            documents=chunks,
-
-            embedding=embeddings,
-
-            persist_directory="./chroma_db"
-        )
-
-        return vectorstore
-
-    except Exception as e:
-
-        raise Exception(
-            f"Embedding / ChromaDB error: {e}"
-        )
-
-
-# --------------------------------------------------
-# SEARCH DOCUMENTS
-# --------------------------------------------------
 
 def search_documents(
     vectorstore,
@@ -152,78 +56,37 @@ def search_documents(
     selected_pdfs
 ):
 
-    try:
-
-        if not question.strip():
-            raise Exception(
-                "Question cannot be empty."
-            )
-
-        if not selected_pdfs:
-            raise Exception(
-                "No PDFs were selected."
-            )
-
-        results = vectorstore.similarity_search(
-
-            question,
-
-            k=4,
-
-            filter={
-                "source": {
-                    "$in": selected_pdfs
-                }
+    results = vectorstore.similarity_search(
+        question,
+        k=4,
+        filter={
+            "source": {
+                "$in": selected_pdfs
             }
-        )
+        }
+    )
 
-        return results
+    return results
 
-    except Exception as e:
-
-        raise Exception(
-            f"Vector search error: {e}"
-        )
-
-
-# --------------------------------------------------
-# GENERATE ANSWER
-# --------------------------------------------------
 
 def generate_answer(
     question,
     documents
 ):
 
-    try:
+    llm = ChatOpenAI(
+        model="openai/gpt-4o-mini",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        base_url="https://openrouter.ai/api/v1",
+        temperature=0
+    )
 
-        api_key = get_api_key()
+    context = "\n\n".join(
+        document.page_content
+        for document in documents
+    )
 
-        if not documents:
-
-            raise Exception(
-                "No relevant documents were found."
-            )
-
-        llm = ChatOpenAI(
-
-            model="openai/gpt-4o-mini",
-
-            api_key=api_key,
-
-            base_url="https://openrouter.ai/api/v1",
-
-            temperature=0
-        )
-
-        context = "\n\n".join(
-
-            document.page_content
-
-            for document in documents
-        )
-
-        prompt = f"""
+    prompt = f"""
 Answer the user's question using only
 the provided PDF context.
 
@@ -242,18 +105,6 @@ Question:
 Answer:
 """
 
-        response = llm.invoke(prompt)
+    response = llm.invoke(prompt)
 
-        if not response:
-
-            raise Exception(
-                "LLM returned an empty response."
-            )
-
-        return response.content
-
-    except Exception as e:
-
-        raise Exception(
-            f"OpenRouter LLM API error: {e}"
-        )
+    return response.content
