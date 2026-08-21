@@ -88,7 +88,11 @@ The application follows this pipeline:
 | python-dotenv                  | Environment variables |
 
 ---
-
+# App Deployed on Streamlit Link
+```bash
+https://pdf-rag-assistant-demo0fragsystem.streamlit.app/
+```
+--- 
 # 📋 Requirements
 
 Before starting, make sure you have:
